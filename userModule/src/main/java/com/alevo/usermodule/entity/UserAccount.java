@@ -1,12 +1,10 @@
 package com.alevo.usermodule.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import com.alevo.usermodule.enums.UserStatus;
 
 
 import java.time.LocalDateTime;
@@ -19,6 +17,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class UserAccount {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -63,7 +62,5 @@ public class UserAccount {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RefreshToken> refreshTokens = new ArrayList<>();
 
-    public enum UserStatus {
-        ONLINE, OFFLINE, BUSY
-    }
+
 }

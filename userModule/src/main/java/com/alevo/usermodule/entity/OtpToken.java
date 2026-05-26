@@ -1,5 +1,6 @@
 package com.alevo.usermodule.entity;
 
+import com.alevo.usermodule.enums.OtpPurpose;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -65,7 +66,5 @@ public class OtpToken {
         this.attempts++;
     }
 
-    public enum OtpPurpose {
-        LOGIN, REGISTRATION, DEVICE_LINK, PHONE_CHANGE
-    }
+
 }

@@ -1,5 +1,6 @@
 package com.alevo.usermodule.entity;
 
+import com.alevo.usermodule.enums.DeviceType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Device {
 
     @Id
@@ -76,14 +78,7 @@ public class Device {
     @Column(name = "unlink_reason", length = 100)
     private String unlinkReason;
 
-    public enum DeviceType {
-        ANDROID,
-        IOS,
-        WEB,
-        DESKTOP_WINDOWS,
-        DESKTOP_MAC,
-        DESKTOP_LINUX
-    }
+
 
     /**
      * Deactivate this device with a reason.

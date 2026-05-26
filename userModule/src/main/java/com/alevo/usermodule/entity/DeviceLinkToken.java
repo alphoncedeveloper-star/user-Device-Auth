@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class DeviceLinkToken {
 
     @Id
@@ -41,6 +42,8 @@ public class DeviceLinkToken {
 
     @Column(name = "used_at")
     private LocalDateTime usedAt;
+
+
 
     public boolean isExpired() {
         return LocalDateTime.now().isAfter(expiresAt);
