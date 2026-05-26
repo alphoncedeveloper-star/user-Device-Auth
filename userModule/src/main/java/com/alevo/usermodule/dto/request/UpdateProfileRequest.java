@@ -1,0 +1,15 @@
+package com.alevo.usermodule.dto.request;
+
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+
+@Data
+public class UpdateProfileRequest {
+    @Size(min = 1, max = 100)
+    private String displayName;
+
+    @Size(max = 500)
+    private String about;
+
+    private String profilePictureUrl;
+}
