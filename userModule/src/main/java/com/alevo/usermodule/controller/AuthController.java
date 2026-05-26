@@ -13,18 +13,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Authentication endpoints — WhatsApp-style phone + OTP flow.
- *
- * PUBLIC:
- *   POST /api/auth/send-otp       → Request OTP
- *   POST /api/auth/verify-otp     → Submit OTP + device info → get tokens
- *   POST /api/auth/refresh         → Rotate access token
- *
- * PROTECTED:
- *   POST /api/auth/logout          → Logout current device
- *   POST /api/auth/logout-all      → Logout all devices
- */
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor

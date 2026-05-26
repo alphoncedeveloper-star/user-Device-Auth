@@ -24,7 +24,7 @@ public class ScheduledCleanup {
     private final RefreshTokenRepository refreshTokenRepository;
     private final DeviceLinkTokenRepository deviceLinkTokenRepository;
 
-    @Scheduled(cron = "0 * * * * *") // 03:00 daily
+    @Scheduled(cron = "0 0 3 * * *") // 03:00 daily
     @Transactional
     public void cleanExpiredTokens() {
         LocalDateTime now = LocalDateTime.now();

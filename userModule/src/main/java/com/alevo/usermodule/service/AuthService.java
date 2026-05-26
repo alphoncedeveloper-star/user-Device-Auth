@@ -44,8 +44,14 @@ public class AuthService {
      * Send OTP - works for both new and existing users.
      */
     public void sendOtp(String phoneNumber) {
+
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            throw new AuthException("Phone number is required");
+        }
+
         boolean isNew = !userRepository.existsByPhoneNumber(phoneNumber);
         OtpPurpose purpose = isNew ? OtpPurpose.REGISTRATION : OtpPurpose.LOGIN;
+
         otpService.sendOtp(phoneNumber, purpose);
     }
 
@@ -54,10 +60,24 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse verifyOtpAndAuthenticate(VerifyOtpRequest req) {
+
+        if (req == null) {
+            throw new AuthException("Request cannot be null");
+        }
+
+        if (req.getPhoneNumber() == null || req.getPhoneNumber().isBlank()) {
+            throw new AuthException("Phone number is required");
+        }
+
+        if (req.getOtpCode() == null || req.getOtpCode().isBlank()) {
+            throw new AuthException("OTP code is required");
+        }
+
         boolean isNew = !userRepository.existsByPhoneNumber(req.getPhoneNumber());
+
         OtpPurpose purpose = isNew ? OtpPurpose.REGISTRATION : OtpPurpose.LOGIN;
 
-        // Verify OTP (throws on failure)
+        // Verify OTP
         otpService.verifyOtp(req.getPhoneNumber(), req.getOtpCode(), purpose);
 
         // Get or create user
@@ -68,13 +88,14 @@ public class AuthService {
 
         // Issue tokens
         String accessToken = tokenProvider.generateAccessToken(user, device);
+
         String rawRefreshToken = tokenProvider.generateRefreshToken();
+
         issueRefreshToken(user, device, rawRefreshToken);
 
-        log.info("User {} authenticated via device {} (new={})", user.getPhoneNumber(), device.getDeviceName(), isNew);
+        log.info("User {} authenticated via device {} (new={})", user.getPhoneNumber(), device != null ? device.getDeviceName() : "unknown", isNew);
 
-        return AuthResponse.builder().accessToken(accessToken).refreshToken(rawRefreshToken).accessTokenExpiresIn(900) // 15 min in seconds
-                .user(mapUser(user)).device(mapDevice(device, device.getId())).newUser(isNew).build();
+        return AuthResponse.builder().accessToken(accessToken).refreshToken(rawRefreshToken).accessTokenExpiresIn(900).user(mapUser(user)).device(mapDevice(device, device != null ? device.getId() : null)).newUser(isNew).build();
     }
 
     /**
@@ -82,6 +103,11 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse refreshAccessToken(String rawRefreshToken) {
+
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new AuthException("Refresh token is required");
+        }
+
         RefreshToken refreshToken = refreshTokenRepository.findByTokenAndRevokedFalse(rawRefreshToken).orElseThrow(() -> new AuthException("Invalid or expired refresh token"));
 
         if (!refreshToken.isValid()) {
@@ -91,26 +117,46 @@ public class AuthService {
         UserAccount user = refreshToken.getUser();
         Device device = refreshToken.getDevice();
 
-        if (!user.isActive()) throw new AuthException("Account is deactivated");
-        if (!device.isActive()) throw new AuthException("Device has been unlinked");
+        if (user == null) {
+            throw new AuthException("User not found");
+        }
+
+        if (device == null) {
+            throw new AuthException("Device not found");
+        }
+
+        if (!user.isActive()) {
+            throw new AuthException("Account is deactivated");
+        }
+
+        if (!device.isActive()) {
+            throw new AuthException("Device has been unlinked");
+        }
 
         refreshToken.touch();
         refreshTokenRepository.save(refreshToken);
 
         String newAccessToken = tokenProvider.generateAccessToken(user, device);
 
-        return AuthResponse.builder().accessToken(newAccessToken).refreshToken(rawRefreshToken) // same refresh token
-                .accessTokenExpiresIn(900).user(mapUser(user)).device(mapDevice(device, device.getId())).build();
+        return AuthResponse.builder().accessToken(newAccessToken).refreshToken(rawRefreshToken).accessTokenExpiresIn(900).user(mapUser(user)).device(mapDevice(device, device.getId())).build();
     }
 
     /**
-     * Logout from current device — revoke its tokens.
+     * Logout from current device.
      */
     @Transactional
     public void logout(UserAccount user, Device device) {
+
+        if (user == null || device == null) {
+            return;
+        }
+
         refreshTokenRepository.revokeDeviceTokens(device, "USER_LOGOUT");
+
         device.deactivate("USER_LOGOUT");
+
         deviceRepository.save(device);
+
         log.info("User {} logged out from device {}", user.getPhoneNumber(), device.getDeviceName());
     }
 
@@ -119,11 +165,17 @@ public class AuthService {
      */
     @Transactional
     public void logoutAllDevices(UserAccount user) {
+
+        if (user == null) {
+            return;
+        }
+
         refreshTokenRepository.revokeAllUserTokens(user, "LOGOUT_ALL_DEVICES");
+
         deviceRepository.deactivateAllNonPrimaryDevices(user, "LOGOUT_ALL_DEVICES");
 
-        // Also deactivate primary device
         Optional<Device> primary = deviceRepository.findByUserAndPrimaryTrue(user);
+
         primary.ifPresent(d -> {
             d.deactivate("LOGOUT_ALL_DEVICES");
             deviceRepository.save(d);
@@ -132,39 +184,79 @@ public class AuthService {
         log.info("All devices logged out for user {}", user.getPhoneNumber());
     }
 
-    // ─── Helpers ─────────────────────────────────────────────
+    // =========================================================
+    // Helpers
+    // =========================================================
 
     private UserAccount createNewUser(String phoneNumber) {
+
         UserAccount user = UserAccount.builder().phoneNumber(phoneNumber).verified(true).build();
+
         return userRepository.save(user);
     }
 
     private Device resolveDevice(UserAccount user, VerifyOtpRequest req, boolean isFirstDevice) {
+
+        if (user == null || req == null) {
+            throw new AuthException("Invalid device request");
+        }
+
         // Check if same device fingerprint already exists
-        Optional<Device> existing = deviceRepository.findByFingerprintAndUser(req.getFingerprint(), user);
-        if (existing.isPresent()) {
-            Device device = existing.get();
-            device.setActive(true);
-            device.setUnlinkedAt(null);
-            device.setUnlinkReason(null);
-            device.setPushToken(req.getPushToken());
-            device.touch();
-            return deviceRepository.save(device);
+        if (req.getFingerprint() != null && !req.getFingerprint().isBlank()) {
+
+            Optional<Device> existing = deviceRepository.findByFingerprintAndUser(req.getFingerprint(), user);
+
+            if (existing.isPresent()) {
+
+                Device device = existing.get();
+
+                device.setActive(true);
+                device.setUnlinkedAt(null);
+                device.setUnlinkReason(null);
+                device.setPushToken(req.getPushToken());
+
+                device.touch();
+
+                return deviceRepository.save(device);
+            }
         }
 
         // Check device limit
         long activeCount = deviceRepository.countByUserAndActiveTrue(user);
+
         if (activeCount >= maxLinkedDevices) {
             throw new DeviceLimitException("Maximum of " + maxLinkedDevices + " devices allowed. Please unlink a device first.");
         }
 
         String ip = extractIpAddress();
-        Device device = Device.builder().user(user).deviceName(req.getDeviceName()).deviceType(DeviceType.valueOf(req.getDeviceType())).osName(req.getOsName()).osVersion(req.getOsVersion()).browserOrApp(req.getBrowserOrApp()).appVersion(req.getAppVersion()).fingerprint(req.getFingerprint()).pushToken(req.getPushToken()).ipAddress(ip).primary(isFirstDevice || activeCount == 0).lastActiveAt(LocalDateTime.now()).build();
+
+        Device device = Device.builder().user(user).deviceName(req.getDeviceName()).deviceType(parseDeviceType(req.getDeviceType())).osName(req.getOsName()).osVersion(req.getOsVersion()).browserOrApp(req.getBrowserOrApp()).appVersion(req.getAppVersion()).fingerprint(req.getFingerprint()).pushToken(req.getPushToken()).ipAddress(ip).primary(isFirstDevice || activeCount == 0).lastActiveAt(LocalDateTime.now()).build();
 
         return deviceRepository.save(device);
     }
 
+    private DeviceType parseDeviceType(String type) {
+
+        if (type == null || type.isBlank()) {
+            return null;
+        }
+
+        try {
+            return DeviceType.valueOf(type.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+
+            log.warn("Invalid device type: {}", type);
+
+            return null;
+        }
+    }
+
     private void issueRefreshToken(UserAccount user, Device device, String rawToken) {
+
+        if (user == null || device == null || rawToken == null) {
+            return;
+        }
+
         // Revoke any existing token for this device
         refreshTokenRepository.findByDeviceAndRevokedFalse(device).ifPresent(t -> {
             t.revoke("NEW_LOGIN");
@@ -172,27 +264,51 @@ public class AuthService {
         });
 
         RefreshToken refreshToken = RefreshToken.builder().token(rawToken).user(user).device(device).expiresAt(LocalDateTime.now().plusNanos(tokenProvider.getRefreshTokenExpiryMs() * 1_000_000)).build();
+
         refreshTokenRepository.save(refreshToken);
     }
 
     private String extractIpAddress() {
+
         try {
+
             var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-            if (attrs != null) {
+
+            if (attrs != null && attrs.getRequest() != null) {
+
                 String xff = attrs.getRequest().getHeader("X-Forwarded-For");
-                if (xff != null && !xff.isBlank()) return xff.split(",")[0].trim();
-                return attrs.getRequest().getRemoteAddr();
+
+                if (xff != null && !xff.isBlank()) {
+                    return xff.split(",")[0].trim();
+                }
+
+                String remoteAddr = attrs.getRequest().getRemoteAddr();
+
+                return remoteAddr != null ? remoteAddr : "unknown";
             }
-        } catch (Exception ignored) {
+
+        } catch (Exception ex) {
+            log.warn("Failed to extract IP address", ex);
         }
+
         return "unknown";
     }
 
     public UserResponse mapUser(UserAccount user) {
-        return UserResponse.builder().id(user.getId()).phoneNumber(user.getPhoneNumber()).displayName(user.getDisplayName()).about(user.getAbout()).profilePictureUrl(user.getProfilePictureUrl()).verified(user.isVerified()).status(user.getStatus().name()).lastSeen(user.getLastSeen()).createdAt(user.getCreatedAt()).build();
+
+        if (user == null) {
+            return null;
+        }
+
+        return UserResponse.builder().id(user.getId()).phoneNumber(user.getPhoneNumber()).displayName(user.getDisplayName()).about(user.getAbout()).profilePictureUrl(user.getProfilePictureUrl()).verified(user.isVerified()).status(user.getStatus() != null ? user.getStatus().name() : null).lastSeen(user.getLastSeen()).createdAt(user.getCreatedAt()).build();
     }
 
     public DeviceResponse mapDevice(Device device, String currentDeviceId) {
-        return DeviceResponse.builder().id(device.getId()).deviceName(device.getDeviceName()).deviceType(device.getDeviceType().name()).osName(device.getOsName()).osVersion(device.getOsVersion()).browserOrApp(device.getBrowserOrApp()).appVersion(device.getAppVersion()).primary(device.isPrimary()).active(device.isActive()).ipAddress(device.getIpAddress()).lastActiveAt(device.getLastActiveAt()).linkedAt(device.getLinkedAt()).currentDevice(device.getId().equals(currentDeviceId)).build();
+
+        if (device == null) {
+            return null;
+        }
+
+        return DeviceResponse.builder().id(device.getId()).deviceName(device.getDeviceName()).deviceType(device.getDeviceType() != null ? device.getDeviceType().name() : null).osName(device.getOsName()).osVersion(device.getOsVersion()).browserOrApp(device.getBrowserOrApp()).appVersion(device.getAppVersion()).primary(device.isPrimary()).active(device.isActive()).ipAddress(device.getIpAddress()).lastActiveAt(device.getLastActiveAt()).linkedAt(device.getLinkedAt()).currentDevice(currentDeviceId != null && device.getId() != null && device.getId().equals(currentDeviceId)).build();
     }
 }

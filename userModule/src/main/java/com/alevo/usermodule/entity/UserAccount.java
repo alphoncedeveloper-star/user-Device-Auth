@@ -6,7 +6,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import com.alevo.usermodule.enums.UserStatus;
 
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +18,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class UserAccount {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
@@ -29,18 +29,23 @@ public class UserAccount {
     @Column(name = "display_name", length = 100)
     private String displayName;
 
+    @Builder.Default
     @Column(name = "about", length = 500)
     private String about = "Hey there! I am using UserAuth.";
 
+    @Builder.Default
     @Column(name = "profile_picture_url")
-    private String profilePictureUrl;
+    private String profilePictureUrl = null;
 
+    @Builder.Default
     @Column(name = "is_verified", nullable = false)
     private boolean verified = false;
 
+    @Builder.Default
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private UserStatus status = UserStatus.OFFLINE;
@@ -56,11 +61,11 @@ public class UserAccount {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Device> devices = new ArrayList<>();
 
+    @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RefreshToken> refreshTokens = new ArrayList<>();
-
-
 }
